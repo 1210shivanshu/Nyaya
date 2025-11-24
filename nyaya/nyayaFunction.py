@@ -17,13 +17,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-API_KEY = os.getenv("GROQ_API_KEY")
+import streamlit as st
 
+
+api_key = st.secrets["GROQ_API_KEY"]
 
 # Always get project root correctly on Streamlit Cloud
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 FILE_PATH = os.path.join(PROJECT_ROOT, "dataset", "bnsdataset.xlsx")
+
 
 print("DEBUG PROJECT_ROOT:", PROJECT_ROOT)
 print("DEBUG FILE_PATH:", FILE_PATH)
