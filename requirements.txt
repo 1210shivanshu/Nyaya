@@ -1,47 +1,23 @@
-# -------------------------
-# Core App Dependencies
-# -------------------------
 streamlit==1.40.0
 groq==0.11.0
-python-dotenv==1.0.1
 
-# -------------------------
-# ML + Embeddings
-# -------------------------
 sentence-transformers==3.4.1
 scikit-learn==1.6.1
 numpy==2.1.2
 pandas==2.2.3
 tqdm==4.67.0
 
-# -------------------------
-# Torch CPU (IMPORTANT)
-# -------------------------
-torch==2.2.2+cpu
---index-url https://download.pytorch.org/whl/cpu
-
-# -------------------------
-# Transformers ecosystem
-# -------------------------
-transformers==4.46.2
-safetensors==0.4.5
-
-# -------------------------
-# File / PDF Processing
-# -------------------------
 pillow==11.0.0
 pdfplumber==0.11.0
 PyPDF2==3.0.1
 pymupdf==1.24.10
 
-# -------------------------
-# Utils
-# -------------------------
+requests==2.32.3
+python-dateutil==2.9.0.post0
+pytz==2024.2
 
 deep-translator==1.11.4
 
-# -------------------------
-# Streamlit helpers
-# -------------------------
 streamlit-server-state==0.18.2
 watchdog==5.0.3
+openpyxl==3.1.5
