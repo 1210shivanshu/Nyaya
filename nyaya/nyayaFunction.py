@@ -6,38 +6,32 @@ from groq import Groq
 import re
 import logging
 from typing import Dict, List, Optional, Union
-import time
 from functools import lru_cache
 import os
-
-
+import streamlit as st
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
-import streamlit as st
-
-
+# Load API key
 api_key = st.secrets["GROQ_API_KEY"]
 
-# Always get project root correctly on Streamlit Cloud
+# Get project root and dataset path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
 FILE_PATH = os.path.join(PROJECT_ROOT, "dataset", "bnsdataset.xlsx")
 
+logger.info(f"DEBUG PROJECT_ROOT: {PROJECT_ROOT}")
+logger.info(f"DEBUG FILE_PATH: {FILE_PATH}")
+logger.info(f"DEBUG EXISTS: {os.path.exists(FILE_PATH)}")
 
-print("DEBUG PROJECT_ROOT:", PROJECT_ROOT)
-print("DEBUG FILE_PATH:", FILE_PATH)
-print("DEBUG EXISTS:", os.path.exists(FILE_PATH))
-
+# Load dataset
 df = pd.read_excel(FILE_PATH)
 
-
+# Constants
 MODEL_NAME = 'all-MiniLM-L12-v2'
-SIMILARITY_THRESHOLD = 0.3  # Minimum similarity score for matches
-TOP_K_MATCHES = 3  # Number of top matches to consider
+SIMILARITY_THRESHOLD = 0.3
+TOP_K_MATCHES = 3
 
 class QueryRequest(BaseModel):
     query: str
@@ -64,12 +58,9 @@ class BNSSearchSystem:
         self._create_embeddings()
     
     def _load_dataset(self):
-        """Load and validate dataset"""
         try:
             logger.info(f"Loading dataset from {self.file_path}")
             self.dataset = pd.read_excel(self.file_path)
-            
-            # Handle missing values more intelligently
             self.dataset = self.dataset.fillna({
                 'Content': 'No content available',
                 'Explanation': 'No explanation available',
@@ -79,30 +70,25 @@ class BNSSearchSystem:
                 'Cross_References': 'No cross references',
                 'Title': 'Untitled section'
             })
-            
-            # Validate required columns
             missing_columns = [col for col in self.required_columns if col not in self.dataset.columns]
             if missing_columns:
                 raise ValueError(f"Missing required columns: {missing_columns}")
-            
             logger.info(f"Dataset loaded successfully with {len(self.dataset)} rows")
-            
         except Exception as e:
             logger.error(f"Error loading dataset: {e}")
             raise
     
     def _initialize_model(self):
-        """Initialize sentence transformer model"""
         try:
             logger.info(f"Loading sentence transformer model: {MODEL_NAME}")
-            self.model = SentenceTransformer(MODEL_NAME)
+            self.model = SentenceTransformer(MODEL_NAME, device='cpu')  # force CPU
             logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             raise
     
     def _initialize_groq_client(self):
-        """Initialize Groq client"""
+        """Initialize Groq client without proxies argument (fix for deployment error)"""
         try:
             self.client = Groq(api_key=self.api_key)
             logger.info("Groq client initialized successfully")
@@ -111,11 +97,8 @@ class BNSSearchSystem:
             raise
     
     def _create_embeddings(self):
-        """Create embeddings for all content"""
         try:
             logger.info("Creating embeddings for dataset...")
-            
-            # Combine multiple fields for better matching
             combined_text = []
             for _, row in self.dataset.iterrows():
                 text_parts = [
@@ -129,21 +112,12 @@ class BNSSearchSystem:
             
             self.embeddings = self.model.encode(combined_text, show_progress_bar=True)
             logger.info(f"Created embeddings for {len(combined_text)} entries")
-            
         except Exception as e:
             logger.error(f"Error creating embeddings: {e}")
             raise
     
     def _extract_section_number(self, query: str) -> Optional[str]:
-        """Extract section number from query if present"""
-        # Match patterns like "Section 123", "sec 123", "123", etc.
-        patterns = [
-            r'section\s+(\d+)',
-            r'sec\s+(\d+)',
-            r'§\s*(\d+)',
-            r'\b(\d{1,3})\b'  # standalone numbers
-        ]
-        
+        patterns = [r'section\s+(\d+)', r'sec\s+(\d+)', r'§\s*(\d+)', r'\b(\d{1,3})\b']
         for pattern in patterns:
             match = re.search(pattern, query.lower())
             if match:
@@ -151,7 +125,6 @@ class BNSSearchSystem:
         return None
     
     def _search_by_section_number(self, section_num: str) -> Optional[pd.Series]:
-        """Search for exact section number match"""
         try:
             section_num = int(section_num)
             matches = self.dataset[self.dataset['Section_Number'] == section_num]
@@ -162,7 +135,6 @@ class BNSSearchSystem:
         return None
     
     def _convert_numpy(self, obj):
-        """Convert numpy objects to native Python types"""
         if isinstance(obj, (np.integer, np.floating)):
             return obj.item()
         elif isinstance(obj, np.ndarray):
@@ -174,14 +146,11 @@ class BNSSearchSystem:
     @lru_cache(maxsize=100)
     def _generate_response_cached(self, title: str, content: str, explanation: str, 
                                  exception: str, illustrations: str, punishment: str) -> str:
-        """Cached version of response generation to avoid repeated api calls"""
         return self._generate_human_like_response_internal(
             title, content, explanation, exception, illustrations, punishment
         )
     
-    def _generate_human_like_response_internal(self, title: str, content: str, explanation: str,
-                                             exception: str, illustrations: str, punishment: str) -> str:
-        """Generate human-like response using Groq api"""
+    def _generate_human_like_response_internal(self, title, content, explanation, exception, illustrations, punishment):
         prompt = f"""Based on the following legal information from the Bharatiya Nyaya Sanhita (BNS), create a comprehensive and clear explanation for the general public:
 
 Title: {title}
@@ -201,7 +170,6 @@ Instructions:
 7. Make it flow as a cohesive paragraph
 
 Please provide a detailed, human-readable explanation:"""
-
         try:
             completion = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
@@ -209,31 +177,24 @@ Please provide a detailed, human-readable explanation:"""
                     {"role": "system", "content": "You are a legal expert who explains Indian laws in simple, clear language for the general public."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,  # Reduced for more consistent responses
+                temperature=0.7,
                 max_tokens=1024,
                 top_p=0.9,
                 stream=True,
                 stop=None
             )
-            
             response_text = ""
             for chunk in completion:
                 if chunk.choices[0].delta.content:
                     response_text += chunk.choices[0].delta.content
-            
             return response_text.strip()
-            
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return f"Error generating explanation. Please try again later. (Error: {str(e)})"
     
-    def search(self, user_query: str, include_alternatives: bool = False, 
-               similarity_threshold: float = SIMILARITY_THRESHOLD) -> Dict:
-        """Enhanced search with multiple matching strategies"""
+    def search(self, user_query: str, include_alternatives: bool = False, similarity_threshold: float = SIMILARITY_THRESHOLD) -> Dict:
         try:
             logger.info(f"Processing query: {user_query}")
-            
-            # Strategy 1: Try exact section number match first
             section_num = self._extract_section_number(user_query)
             if section_num:
                 exact_match = self._search_by_section_number(section_num)
@@ -241,15 +202,11 @@ Please provide a detailed, human-readable explanation:"""
                     logger.info(f"Found exact section match: {section_num}")
                     return self._format_response(exact_match, "Exact Section Match")
             
-            # Strategy 2: Semantic similarity search
             query_embedding = self.model.encode(user_query)
             similarities = util.cos_sim(query_embedding, self.embeddings)[0].numpy()
             
-            # Get top matches
             top_indices = np.argsort(similarities)[::-1][:TOP_K_MATCHES]
             top_similarities = similarities[top_indices]
-            
-            # Check if best match meets threshold
             best_similarity = top_similarities[0]
             if best_similarity < similarity_threshold:
                 return {
@@ -258,16 +215,13 @@ Please provide a detailed, human-readable explanation:"""
                     "suggestion": "Try rephrasing your query or using more specific legal terms."
                 }
             
-            # Get best match
             best_match_idx = top_indices[0]
             matched_row = self.dataset.iloc[best_match_idx]
-            
             response = self._format_response(matched_row, "Semantic Match", best_similarity)
             
-            # Add alternative matches if requested
             if include_alternatives and len(top_indices) > 1:
                 alternatives = []
-                for i in range(1, min(len(top_indices), 3)):  # Up to 2 alternatives
+                for i in range(1, min(len(top_indices), 3)):
                     if top_similarities[i] >= similarity_threshold:
                         alt_row = self.dataset.iloc[top_indices[i]]
                         alternatives.append({
@@ -275,12 +229,9 @@ Please provide a detailed, human-readable explanation:"""
                             "title": alt_row['Title'],
                             "similarity_score": float(top_similarities[i])
                         })
-                
                 if alternatives:
                     response["alternatives"] = alternatives
-            
             return response
-            
         except Exception as e:
             logger.error(f"Error in search: {e}")
             return {
@@ -288,11 +239,8 @@ Please provide a detailed, human-readable explanation:"""
                 "message": f"An error occurred while processing your query: {str(e)}"
             }
     
-    def _format_response(self, matched_row: pd.Series, match_type: str, 
-                        similarity_score: float = None) -> Dict:
-        """Format the response in a consistent structure"""
+    def _format_response(self, matched_row: pd.Series, match_type: str, similarity_score: float = None) -> Dict:
         try:
-            # Generate human-like explanation
             human_explanation = self._generate_response_cached(
                 str(matched_row['Title']),
                 str(matched_row['Content']),
@@ -301,7 +249,6 @@ Please provide a detailed, human-readable explanation:"""
                 str(matched_row['Illustrations']),
                 str(matched_row['Punishment'])
             )
-            
             response = {
                 "status": "success",
                 "match_type": match_type,
@@ -317,12 +264,9 @@ Please provide a detailed, human-readable explanation:"""
                 "punishment": matched_row['Punishment'],
                 "cross_references": matched_row['Cross_References']
             }
-            
             if similarity_score is not None:
                 response["similarity_score"] = float(similarity_score)
-            
             return response
-            
         except Exception as e:
             logger.error(f"Error formatting response: {e}")
             return {
@@ -330,22 +274,18 @@ Please provide a detailed, human-readable explanation:"""
                 "message": f"Error formatting response: {str(e)}"
             }
 
-# Initialize the system
+# Initialize system
 try:
     bns_system = BNSSearchSystem(FILE_PATH, api_key)
-
     logger.info("BNS Search System initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize BNS Search System: {e}")
     bns_system = None
 
-def modelRun(user_query: str, include_alternatives: bool = False, 
-             similarity_threshold: float = SIMILARITY_THRESHOLD) -> Dict:
-    """Main function to run the model with improved features"""
+def modelRun(user_query: str, include_alternatives: bool = False, similarity_threshold: float = SIMILARITY_THRESHOLD) -> Dict:
     if bns_system is None:
         return {
             "status": "error",
-            "message": "BNS Search System not initialized. Please check the dataset file and api key."
+            "message": "BNS Search System not initialized. Please check the dataset file and API key."
         }
-    
     return bns_system.search(user_query, include_alternatives, similarity_threshold)
