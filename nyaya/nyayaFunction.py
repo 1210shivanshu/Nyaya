@@ -332,7 +332,8 @@ Please provide a detailed, human-readable explanation:"""
 
 # Initialize the system
 try:
-    bns_system = BNSSearchSystem(FILE_PATH, API_KEY)
+    bns_system = BNSSearchSystem(FILE_PATH, api_key)
+
     logger.info("BNS Search System initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize BNS Search System: {e}")
