@@ -22,6 +22,10 @@ api_key = st.secrets["GROQ_API_KEY"]
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILE_PATH = os.path.join(BASE_DIR, "dataset", "bnsdataset.xlsx")
+
+if not os.path.exists(FILE_PATH):
+    raise FileNotFoundError(f"Dataset not found at: {FILE_PATH}")
+
 df = pd.read_excel(FILE_PATH)
 
 MODEL_NAME = 'all-MiniLM-L12-v2'
