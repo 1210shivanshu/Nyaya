@@ -9,8 +9,7 @@ from typing import Dict, List, Optional, Union
 import time
 from functools import lru_cache
 import os
-from dotenv import load_dotenv
-load_dotenv()
+
 
 
 # Configure logging
