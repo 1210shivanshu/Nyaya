@@ -17,7 +17,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-API_KEY = os.getenv("GROQ_API_KEY")
+import streamlit as st
+api_key = st.secrets["GROQ_API_KEY"]
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILE_PATH = os.path.join(BASE_DIR, "dataset", "bnsdataset.xlsx")
 df = pd.read_excel(FILE_PATH)
