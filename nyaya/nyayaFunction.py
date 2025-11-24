@@ -20,13 +20,19 @@ logger = logging.getLogger(__name__)
 import streamlit as st
 api_key = st.secrets["GROQ_API_KEY"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILE_PATH = os.path.join(BASE_DIR, "dataset", "bnsdataset.xlsx")
+import os
 
-if not os.path.exists(FILE_PATH):
-    raise FileNotFoundError(f"Dataset not found at: {FILE_PATH}")
+# Always get project root correctly on Streamlit Cloud
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+FILE_PATH = os.path.join(PROJECT_ROOT, "dataset", "bnsdataset.xlsx")
+
+print("DEBUG PROJECT_ROOT:", PROJECT_ROOT)
+print("DEBUG FILE_PATH:", FILE_PATH)
+print("DEBUG EXISTS:", os.path.exists(FILE_PATH))
 
 df = pd.read_excel(FILE_PATH)
+
 
 MODEL_NAME = 'all-MiniLM-L12-v2'
 SIMILARITY_THRESHOLD = 0.3  # Minimum similarity score for matches
